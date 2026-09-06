@@ -6,22 +6,22 @@ import com.ruinscraft.panilla.api.nbt.INbtTagCompound;
 import com.ruinscraft.panilla.api.nbt.NbtDataType;
 import com.ruinscraft.panilla.api.nbt.checks.NbtCheck;
 
-public class NbtCheck_PaperRange extends NbtCheck {
+public class NbtCheck_OminousBottleAmplifier_1_20_6 extends NbtCheck {
 
-    public NbtCheck_PaperRange() {
-        super("minecraft:custom_data", PStrictness.LENIENT);
+    public NbtCheck_OminousBottleAmplifier_1_20_6() {
+        super("minecraft:ominous_bottle_amplifier", PStrictness.AVERAGE);
     }
 
     @Override
     public NbtCheckResult check(INbtTagCompound tag, String itemName, IPanilla panilla) {
-        tag = tag.getCompound(getName());
+        if (tag.hasKeyOfType(getName(), NbtDataType.INT)) {
+            int amplifier = tag.getInt(getName());
 
-        if (tag.hasKeyOfType("Paper.Range", NbtDataType.DOUBLE)) {
-            double paperRange = tag.getDouble("Paper.Range");
-            if (paperRange > 2048) {
-                return NbtCheckResult.CRITICAL;
+            if (amplifier < 0 || amplifier > 4) {
+                return NbtCheckResult.FAIL;
             }
         }
+
         return NbtCheckResult.PASS;
     }
 

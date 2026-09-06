@@ -36,7 +36,7 @@ sourceSets {
 }
 
 dependencies {
-    compileOnly project(':panillax-api')
+    implementation project(':panillax-api')
     // compiled against the oldest supported Paper API so the plugin bytecode
     // loads on every supported server version
     compileOnly 'io.papermc.paper:paper-api:1.21.1-R0.1-SNAPSHOT'

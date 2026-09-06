@@ -51,6 +51,11 @@ public class NbtTagCompound implements INbtTagCompound {
     }
 
     @Override
+    public float getFloat(String key) {
+        return handle.getFloat(key);
+    }
+
+    @Override
     public short getShort(String key) {
         return handle.getShort(key);
     }

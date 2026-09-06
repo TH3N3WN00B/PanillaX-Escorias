@@ -9,6 +9,8 @@ import com.ruinscraft.panilla.api.nbt.INbtTagList;
 import com.ruinscraft.panilla.api.nbt.NbtDataType;
 import com.ruinscraft.panilla.api.nbt.checks.paper1_20_6.*;
 
+import java.util.ArrayDeque;
+import java.util.Deque;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -28,7 +30,6 @@ public final class NbtChecks {
         register(new NbtCheck_Fireworks());
         register(new NbtCheck_Lock());
         register(new NbtCheck_Lore());
-        register(new NbtCheck_PaperRange());
         register(new NbtCheck_SkullOwner1_20_6());
         register(new NbtCheck_WritableBookContent());
         register(new NbtCheck_WrittenBookContent());
@@ -36,7 +37,10 @@ public final class NbtChecks {
         register(new NbtCheck_ChargedProjectiles_1_20_6());
         register(new NbtCheck_Enchantments_1_20_6());
         // non-vanilla
-        register(new NbtCheck_weBrushJson1_20_6());
+        register(new NbtCheck_CustomData_1_20_6());
+        register(new NbtCheck_BundleContents_1_20_6());
+        register(new NbtCheck_OminousBottleAmplifier_1_20_6());
+        register(new NbtCheck_SuspiciousStewEffects_1_20_6());
 
         // other
         // vanilla
@@ -72,8 +76,6 @@ public final class NbtChecks {
         register(new NbtCheck_HasVisualFire()); // 1.17
         register(new NbtCheck_ChargedProjectiles());
         register(new NbtCheck_Items());
-        // non-vanilla
-        register(new NbtCheck_weBrushJson());
     }
 
     private static void register(NbtCheck check) {
@@ -120,6 +122,16 @@ public final class NbtChecks {
     }
 
     private static boolean tagMeetsKeyThreshold(INbtTagCompound tag, IPanilla panilla) {
+        return tagMeetsKeyThreshold(tag, panilla, 0);
+    }
+
+    private static boolean tagMeetsKeyThreshold(INbtTagCompound tag, IPanilla panilla, int depth) {
+        int maxDepth = panilla.getPConfig().maxNbtDepth;
+
+        if (depth > maxDepth) {
+            return false;
+        }
+
         int maxNonMinecraftKeys = panilla.getPConfig().maxNonMinecraftNbtKeys;
 
         if (tag.getNonMinecraftKeys().size() > maxNonMinecraftKeys) {
@@ -130,8 +142,20 @@ public final class NbtChecks {
             if (tag.hasKeyOfType(key, NbtDataType.COMPOUND)) {
                 INbtTagCompound subTag = tag.getCompound(key);
 
-                if (!tagMeetsKeyThreshold(subTag, panilla)) {
+                if (!tagMeetsKeyThreshold(subTag, panilla, depth + 1)) {
                     return false;
+                }
+            } else if (tag.hasKeyOfType(key, NbtDataType.LIST)) {
+                INbtTagList list = tag.getList(key);
+
+                for (int i = 0; i < list.size(); i++) {
+                    if (list.isCompound(i)) {
+                        INbtTagCompound subTag = list.getCompound(i);
+
+                        if (!tagMeetsKeyThreshold(subTag, panilla, depth + 1)) {
+                            return false;
+                        }
+                    }
                 }
             }
         }
@@ -139,10 +163,68 @@ public final class NbtChecks {
         return true;
     }
 
+    private static NbtCheck.NbtCheckResult checkForNonFiniteValues(INbtTagCompound tag, IPanilla panilla) {
+        int maxDepth = panilla.getPConfig().maxNbtDepth;
+
+        Deque<INbtTagCompound> stack = new ArrayDeque<>();
+        Deque<Integer> depths = new ArrayDeque<>();
+        stack.push(tag);
+        depths.push(0);
+
+        while (!stack.isEmpty()) {
+            INbtTagCompound current = stack.pop();
+            int currentDepth = depths.pop();
+
+            if (currentDepth >= maxDepth) {
+                continue;
+            }
+
+            for (String key : current.getKeys()) {
+                if (current.hasKeyOfType(key, NbtDataType.FLOAT)) {
+                    if (!Float.isFinite(current.getFloat(key))) {
+                        return NbtCheck.NbtCheckResult.CRITICAL;
+                    }
+                } else if (current.hasKeyOfType(key, NbtDataType.DOUBLE)) {
+                    if (!Double.isFinite(current.getDouble(key))) {
+                        return NbtCheck.NbtCheckResult.CRITICAL;
+                    }
+                } else if (current.hasKeyOfType(key, NbtDataType.COMPOUND)) {
+                    INbtTagCompound subTag = current.getCompound(key);
+
+                    if (subTag != null && subTag.getHandle() != null) {
+                        stack.push(subTag);
+                        depths.push(currentDepth + 1);
+                    }
+                } else if (current.hasKeyOfType(key, NbtDataType.LIST)) {
+                    INbtTagList list = current.getList(key);
+
+                    for (int i = 0; i < list.size(); i++) {
+                        if (list.isCompound(i)) {
+                            INbtTagCompound subTag = list.getCompound(i);
+
+                            if (subTag != null && subTag.getHandle() != null) {
+                                stack.push(subTag);
+                                depths.push(currentDepth + 1);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        return NbtCheck.NbtCheckResult.PASS;
+    }
+
     public static FailedNbtList checkAll(INbtTagCompound tag, String nmsItemClassName, IPanilla panilla) {
         FailedNbtList failedNbtList = new FailedNbtList();
         if (!tagMeetsKeyThreshold(tag, panilla)) {
             failedNbtList.add(FailedNbt.FAIL_KEY_THRESHOLD);
+        }
+
+        NbtCheck.NbtCheckResult nonFiniteResult = checkForNonFiniteValues(tag, panilla);
+
+        if (nonFiniteResult != NbtCheck.NbtCheckResult.PASS) {
+            failedNbtList.add(new FailedNbt("non_finite_number", nonFiniteResult));
         }
 
         for (String key : tag.getKeys()) {

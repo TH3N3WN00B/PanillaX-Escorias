@@ -22,6 +22,7 @@ public abstract class PConfig {
     public List<String> nbtWhitelist = new ArrayList<>();
     public List<String> disabledWorlds = new ArrayList<>();
     public int maxNonMinecraftNbtKeys = 16;
+    public int maxNbtDepth = 64;
     public boolean overrideMinecraftMaxEnchantmentLevels = false;
     public Map<String, Integer> minecraftMaxEnchantmentLevelOverrides = new HashMap<>();
 

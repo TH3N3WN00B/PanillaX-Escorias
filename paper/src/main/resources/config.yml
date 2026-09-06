@@ -74,3 +74,9 @@ max-enchantment-levels:
 #
 # Generally, you should never have to touch this.
 max-non-minecraft-nbt-keys: 16
+
+# This prevents crash items which use extremely deeply-nested NBT
+# (which can cause a stack overflow on the server when parsed).
+#
+# Legitimate items never nest deeper than a handful of levels.
+max-nbt-depth: 64

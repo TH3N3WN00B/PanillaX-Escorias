@@ -33,6 +33,8 @@ public interface INbtTagCompound {
 
     double getDouble(String key);
 
+    float getFloat(String key);
+
     short getShort(String key);
 
     byte getByte(String key);

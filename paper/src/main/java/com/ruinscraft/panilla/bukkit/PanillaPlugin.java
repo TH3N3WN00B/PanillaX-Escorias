@@ -108,6 +108,7 @@ public class PanillaPlugin extends JavaPlugin implements IPanilla {
         pConfig.nbtWhitelist = getConfig().getStringList("nbt-whitelist");
         pConfig.disabledWorlds = getConfig().getStringList("disabled-worlds");
         pConfig.maxNonMinecraftNbtKeys = getConfig().getInt("max-non-minecraft-nbt-keys", pConfig.maxNonMinecraftNbtKeys);
+        pConfig.maxNbtDepth = getConfig().getInt("max-nbt-depth", pConfig.maxNbtDepth);
         pConfig.overrideMinecraftMaxEnchantmentLevels = getConfig().getBoolean("max-enchantment-levels.override-minecraft-max-enchantment-levels", pConfig.overrideMinecraftMaxEnchantmentLevels);
 
         Map<String, Integer> enchantmentOverrides = new HashMap<>();
