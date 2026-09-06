@@ -9,8 +9,6 @@ import com.ruinscraft.panilla.api.nbt.INbtTagList;
 import com.ruinscraft.panilla.api.nbt.NbtDataType;
 import com.ruinscraft.panilla.api.nbt.checks.paper1_20_6.*;
 
-import java.util.ArrayDeque;
-import java.util.Deque;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -121,29 +119,41 @@ public final class NbtChecks {
         }
     }
 
-    private static boolean tagMeetsKeyThreshold(INbtTagCompound tag, IPanilla panilla) {
-        return tagMeetsKeyThreshold(tag, panilla, 0);
+    private static final class NbtWalkResult {
+        boolean keyThresholdMet = true;
+        NbtCheck.NbtCheckResult nonFiniteResult = NbtCheck.NbtCheckResult.PASS;
     }
 
-    private static boolean tagMeetsKeyThreshold(INbtTagCompound tag, IPanilla panilla, int depth) {
+    private static void walkForThresholdAndNonFinite(INbtTagCompound tag, IPanilla panilla, int depth, NbtWalkResult result) {
         int maxDepth = panilla.getPConfig().maxNbtDepth;
 
         if (depth > maxDepth) {
-            return false;
+            result.keyThresholdMet = false;
+            return;
         }
 
-        int maxNonMinecraftKeys = panilla.getPConfig().maxNonMinecraftNbtKeys;
-
-        if (tag.getNonMinecraftKeys().size() > maxNonMinecraftKeys) {
-            return false;
+        if (result.keyThresholdMet && tag.getNonMinecraftKeys().size() > panilla.getPConfig().maxNonMinecraftNbtKeys) {
+            result.keyThresholdMet = false;
         }
 
         for (String key : tag.getKeys()) {
+            if (result.nonFiniteResult == NbtCheck.NbtCheckResult.PASS) {
+                if (tag.hasKeyOfType(key, NbtDataType.FLOAT)) {
+                    if (!Float.isFinite(tag.getFloat(key))) {
+                        result.nonFiniteResult = NbtCheck.NbtCheckResult.CRITICAL;
+                    }
+                } else if (tag.hasKeyOfType(key, NbtDataType.DOUBLE)) {
+                    if (!Double.isFinite(tag.getDouble(key))) {
+                        result.nonFiniteResult = NbtCheck.NbtCheckResult.CRITICAL;
+                    }
+                }
+            }
+
             if (tag.hasKeyOfType(key, NbtDataType.COMPOUND)) {
                 INbtTagCompound subTag = tag.getCompound(key);
 
-                if (!tagMeetsKeyThreshold(subTag, panilla, depth + 1)) {
-                    return false;
+                if (subTag != null && subTag.getHandle() != null) {
+                    walkForThresholdAndNonFinite(subTag, panilla, depth + 1, result);
                 }
             } else if (tag.hasKeyOfType(key, NbtDataType.LIST)) {
                 INbtTagList list = tag.getList(key);
@@ -152,79 +162,27 @@ public final class NbtChecks {
                     if (list.isCompound(i)) {
                         INbtTagCompound subTag = list.getCompound(i);
 
-                        if (!tagMeetsKeyThreshold(subTag, panilla, depth + 1)) {
-                            return false;
+                        if (subTag != null && subTag.getHandle() != null) {
+                            walkForThresholdAndNonFinite(subTag, panilla, depth + 1, result);
                         }
                     }
                 }
             }
         }
-
-        return true;
-    }
-
-    private static NbtCheck.NbtCheckResult checkForNonFiniteValues(INbtTagCompound tag, IPanilla panilla) {
-        int maxDepth = panilla.getPConfig().maxNbtDepth;
-
-        Deque<INbtTagCompound> stack = new ArrayDeque<>();
-        Deque<Integer> depths = new ArrayDeque<>();
-        stack.push(tag);
-        depths.push(0);
-
-        while (!stack.isEmpty()) {
-            INbtTagCompound current = stack.pop();
-            int currentDepth = depths.pop();
-
-            if (currentDepth >= maxDepth) {
-                continue;
-            }
-
-            for (String key : current.getKeys()) {
-                if (current.hasKeyOfType(key, NbtDataType.FLOAT)) {
-                    if (!Float.isFinite(current.getFloat(key))) {
-                        return NbtCheck.NbtCheckResult.CRITICAL;
-                    }
-                } else if (current.hasKeyOfType(key, NbtDataType.DOUBLE)) {
-                    if (!Double.isFinite(current.getDouble(key))) {
-                        return NbtCheck.NbtCheckResult.CRITICAL;
-                    }
-                } else if (current.hasKeyOfType(key, NbtDataType.COMPOUND)) {
-                    INbtTagCompound subTag = current.getCompound(key);
-
-                    if (subTag != null && subTag.getHandle() != null) {
-                        stack.push(subTag);
-                        depths.push(currentDepth + 1);
-                    }
-                } else if (current.hasKeyOfType(key, NbtDataType.LIST)) {
-                    INbtTagList list = current.getList(key);
-
-                    for (int i = 0; i < list.size(); i++) {
-                        if (list.isCompound(i)) {
-                            INbtTagCompound subTag = list.getCompound(i);
-
-                            if (subTag != null && subTag.getHandle() != null) {
-                                stack.push(subTag);
-                                depths.push(currentDepth + 1);
-                            }
-                        }
-                    }
-                }
-            }
-        }
-
-        return NbtCheck.NbtCheckResult.PASS;
     }
 
     public static FailedNbtList checkAll(INbtTagCompound tag, String nmsItemClassName, IPanilla panilla) {
         FailedNbtList failedNbtList = new FailedNbtList();
-        if (!tagMeetsKeyThreshold(tag, panilla)) {
+
+        NbtWalkResult walkResult = new NbtWalkResult();
+        walkForThresholdAndNonFinite(tag, panilla, 0, walkResult);
+
+        if (!walkResult.keyThresholdMet) {
             failedNbtList.add(FailedNbt.FAIL_KEY_THRESHOLD);
         }
 
-        NbtCheck.NbtCheckResult nonFiniteResult = checkForNonFiniteValues(tag, panilla);
-
-        if (nonFiniteResult != NbtCheck.NbtCheckResult.PASS) {
-            failedNbtList.add(new FailedNbt("non_finite_number", nonFiniteResult));
+        if (walkResult.nonFiniteResult != NbtCheck.NbtCheckResult.PASS) {
+            failedNbtList.add(new FailedNbt("non_finite_number", walkResult.nonFiniteResult));
         }
 
         for (String key : tag.getKeys()) {
