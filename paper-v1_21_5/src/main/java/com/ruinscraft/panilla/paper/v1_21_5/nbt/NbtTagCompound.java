@@ -3,18 +3,31 @@ package com.ruinscraft.panilla.paper.v1_21_5.nbt;
 import com.ruinscraft.panilla.api.nbt.INbtTagCompound;
 import com.ruinscraft.panilla.api.nbt.INbtTagList;
 import com.ruinscraft.panilla.api.nbt.NbtDataType;
-import de.tr7zw.changeme.nbtapi.NBTType;
-import de.tr7zw.changeme.nbtapi.iface.ReadWriteNBT;
+import net.minecraft.nbt.CompoundTag;
+import net.minecraft.nbt.Tag;
+import net.minecraft.server.MinecraftServer;
+import net.minecraft.world.item.ItemStack;
 
 import java.util.Collections;
 import java.util.Set;
 
 public class NbtTagCompound implements INbtTagCompound {
 
-    private final ReadWriteNBT handle;
+    private final CompoundTag handle;
 
-    public NbtTagCompound(ReadWriteNBT handle) {
+    public NbtTagCompound(CompoundTag handle) {
         this.handle = handle;
+    }
+
+    public static NbtTagCompound fromItemStack(ItemStack item) {
+        if (item.getComponentsPatch().isEmpty()) {
+            return new NbtTagCompound(new CompoundTag());
+        }
+        Tag tag = item.save(MinecraftServer.getServer().registryAccess());
+        if (tag instanceof CompoundTag compound) {
+            return new NbtTagCompound(compound.getCompoundOrEmpty("components"));
+        }
+        return new NbtTagCompound(new CompoundTag());
     }
 
     @Override
@@ -24,70 +37,69 @@ public class NbtTagCompound implements INbtTagCompound {
 
     @Override
     public boolean hasKey(String key) {
-        if (handle == null) return false;
-        return handle.hasTag(key);
+        return handle != null && handle.contains(key);
     }
 
     @Override
     public boolean hasKeyOfType(String key, NbtDataType nbtDataType) {
-        if (handle == null) return false;
-        return handle.hasTag(key, NBTType.valueOf(nbtDataType.id));
+        if (handle == null || !handle.contains(key)) return false;
+        Tag tag = handle.get(key);
+        return tag != null && tag.getId() == (byte) nbtDataType.id;
     }
 
     @Override
     public Set<String> getKeys() {
-        if (handle == null) return Collections.emptySet();
-        return handle.getKeys();
+        return handle == null ? Collections.emptySet() : handle.keySet();
     }
 
     @Override
     public int getInt(String key) {
-        return handle.getInteger(key);
+        return handle.getIntOr(key, 0);
     }
 
     @Override
     public double getDouble(String key) {
-        return handle.getDouble(key);
+        return handle.getDoubleOr(key, 0.0D);
     }
 
     @Override
     public float getFloat(String key) {
-        return handle.getFloat(key);
+        return handle.getFloatOr(key, 0.0F);
     }
 
     @Override
     public short getShort(String key) {
-        return handle.getShort(key);
+        return handle.getShortOr(key, (short) 0);
     }
 
     @Override
     public byte getByte(String key) {
-        return handle.getByte(key);
+        return handle.getByteOr(key, (byte) 0);
     }
 
     @Override
     public String getString(String key) {
-        return handle.getString(key);
+        return handle.getStringOr(key, "");
     }
 
     @Override
     public int[] getIntArray(String key) {
-        return handle.getIntArray(key);
+        return handle.getIntArray(key).orElse(new int[0]);
     }
 
     @Override
     public INbtTagList getList(String key, NbtDataType nbtDataType) {
-        return new NbtTagList(nbtDataType == NbtDataType.STRING ? handle.getStringList(key) : handle.getCompoundList(key));
+        return new NbtTagList(handle.getListOrEmpty(key));
     }
 
     @Override
     public INbtTagList getList(String key) {
-        return new NbtTagList(handle.getCompoundList(key));
+        return new NbtTagList(handle.getListOrEmpty(key));
     }
 
     @Override
     public INbtTagCompound getCompound(String key) {
-        return new NbtTagCompound(handle.getCompound(key));
+        return new NbtTagCompound(handle.getCompoundOrEmpty(key));
     }
 
 }

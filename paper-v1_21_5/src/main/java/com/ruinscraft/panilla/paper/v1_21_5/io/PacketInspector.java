@@ -10,7 +10,6 @@ import com.ruinscraft.panilla.api.io.IPacketInspector;
 import com.ruinscraft.panilla.api.nbt.INbtTagCompound;
 import com.ruinscraft.panilla.api.nbt.checks.NbtChecks;
 import com.ruinscraft.panilla.paper.v1_21_5.nbt.NbtTagCompound;
-import de.tr7zw.changeme.nbtapi.NBT;
 import net.minecraft.core.component.TypedDataComponent;
 import net.minecraft.network.protocol.game.*;
 import net.minecraft.server.MinecraftServer;
@@ -53,7 +52,7 @@ public class PacketInspector implements IPacketInspector {
         ItemStack item = packet.itemStack();
         if (item == null || item.isEmpty() || item.getComponents().isEmpty()) return;
 
-        NbtTagCompound tag = new NbtTagCompound(NBT.itemStackToNBT(item.getBukkitStack()).getCompound("components"));
+        NbtTagCompound tag = NbtTagCompound.fromItemStack(item);
         String itemClass = item.getItem().getDescriptionId();
         String packetClass = "PacketPlayInSetCreativeSlot";
 
@@ -80,7 +79,7 @@ public class PacketInspector implements IPacketInspector {
             return;
         }
 
-        NbtTagCompound tag = new NbtTagCompound(NBT.itemStackToNBT(item.getBukkitStack()).getCompound("components"));
+        NbtTagCompound tag = NbtTagCompound.fromItemStack(item);
         String itemClass = item.getClass().getSimpleName();
         String packetClass = packet.getClass().getSimpleName();
 
@@ -107,7 +106,7 @@ public class PacketInspector implements IPacketInspector {
                 continue;
             }
 
-            NbtTagCompound tag = new NbtTagCompound(NBT.itemStackToNBT(itemStack.asBukkitCopy()).getCompound("components"));
+            NbtTagCompound tag = NbtTagCompound.fromItemStack(itemStack);
             String itemClass = itemStack.getClass().getSimpleName();
             String packetClass = packet.getClass().getSimpleName();
 
@@ -142,7 +141,7 @@ public class PacketInspector implements IPacketInspector {
             return;
         }
 
-        INbtTagCompound tag = new NbtTagCompound(NBT.itemStackToNBT(itemStack.getBukkitStack()).getCompound("components"));
+        INbtTagCompound tag = NbtTagCompound.fromItemStack(itemStack);
         String itemName = itemStack.getItem().getDescriptionId();
         String worldName = "";
 

@@ -42,7 +42,6 @@ dependencies {
     compileOnly 'io.papermc.paper:paper-api:1.21.1-R0.1-SNAPSHOT'
     paperweight.paperDevBundle("1.21.11-R0.1-SNAPSHOT")
     implementation 'net.kyori:adventure-text-serializer-ansi:4.17.0' //required for building .11
-    implementation 'de.tr7zw:item-nbt-api:2.16.0'
     implementation 'org.bstats:bstats-bukkit:3.1.0'
 }
 
@@ -65,7 +64,6 @@ shadowJar {
     archiveFileName.set("PanillaX-${project.version}-java25.jar")
     destinationDirectory.set(new File("../target"))
 
-    relocate("de.tr7zw.changeme.nbtapi", "com.ruinscraft.panilla.lib.nbtapi")
     relocate("org.bstats", "com.ruinscraft.panilla.lib.bstats")
 }
 

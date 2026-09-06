@@ -8,13 +8,19 @@ import com.ruinscraft.panilla.api.exception.FailedNbtList;
 import com.ruinscraft.panilla.api.nbt.INbtTagCompound;
 import com.ruinscraft.panilla.api.nbt.checks.NbtChecks;
 import com.ruinscraft.panilla.paper.v1_21_11.nbt.NbtTagCompound;
-import de.tr7zw.changeme.nbtapi.NBT;
-import net.minecraft.core.component.TypedDataComponent;
+import net.minecraft.core.Holder;
+import net.minecraft.core.Registry;
+import net.minecraft.core.component.DataComponentType;
+import net.minecraft.core.component.PatchedDataComponentMap;
+import net.minecraft.core.registries.Registries;
+import net.minecraft.resources.Identifier;
+import net.minecraft.server.MinecraftServer;
 import net.minecraft.world.entity.player.Inventory;
 import net.minecraft.world.item.ItemStack;
 import org.bukkit.craftbukkit.entity.CraftPlayer;
 
-import java.util.Iterator;
+import java.util.ArrayList;
+import java.util.List;
 
 public class InventoryCleaner implements IInventoryCleaner {
 
@@ -36,21 +42,28 @@ public class InventoryCleaner implements IInventoryCleaner {
                 continue;
             }
 
-            INbtTagCompound tag = new NbtTagCompound(NBT.itemStackToNBT(itemStack.getBukkitStack()).getCompound("components"));
+            INbtTagCompound tag = NbtTagCompound.fromItemStack(itemStack);
             String itemName = itemStack.getItem().getDescriptionId();
 
             FailedNbtList failedNbtList = NbtChecks.checkAll(tag, itemName, panilla);
 
             for (FailedNbt failedNbt : failedNbtList) {
                 if (FailedNbt.failsThreshold(failedNbt)) {
-                    Iterator<TypedDataComponent<?>> iter = itemStack.getComponents().iterator();
-                    while (iter.hasNext()) iter.remove();
+                    PatchedDataComponentMap map = (PatchedDataComponentMap) itemStack.getComponents();
+                    List<DataComponentType<?>> types = new ArrayList<>(map.keySet());
+                    for (DataComponentType<?> type : types) {
+                        map.remove(type);
+                    }
 
                     break;
                 } else if (FailedNbt.fails(failedNbt)) {
-                    NBT.modifyComponents(itemStack.getBukkitStack(), s -> {
-                        s.removeKey(failedNbt.key);
-                    });
+                    Registry<DataComponentType<?>> registry = MinecraftServer.getServer().registryAccess().lookupOrThrow(Registries.DATA_COMPONENT_TYPE);
+                    DataComponentType<?> type = registry.get(Identifier.parse(failedNbt.key)).map(Holder.Reference::value).orElse(null);
+
+                    if (type != null) {
+                        ((PatchedDataComponentMap) itemStack.getComponents()).remove(type);
+                    }
+
                     break;
                 }
             }

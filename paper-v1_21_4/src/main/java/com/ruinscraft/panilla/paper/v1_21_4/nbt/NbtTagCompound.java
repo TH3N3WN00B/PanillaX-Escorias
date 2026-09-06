@@ -3,18 +3,31 @@ package com.ruinscraft.panilla.paper.v1_21_4.nbt;
 import com.ruinscraft.panilla.api.nbt.INbtTagCompound;
 import com.ruinscraft.panilla.api.nbt.INbtTagList;
 import com.ruinscraft.panilla.api.nbt.NbtDataType;
-import de.tr7zw.changeme.nbtapi.NBTType;
-import de.tr7zw.changeme.nbtapi.iface.ReadWriteNBT;
+import net.minecraft.nbt.CompoundTag;
+import net.minecraft.nbt.Tag;
+import net.minecraft.server.MinecraftServer;
+import net.minecraft.world.item.ItemStack;
 
 import java.util.Collections;
 import java.util.Set;
 
 public class NbtTagCompound implements INbtTagCompound {
 
-    private final ReadWriteNBT handle;
+    private final CompoundTag handle;
 
-    public NbtTagCompound(ReadWriteNBT handle) {
+    public NbtTagCompound(CompoundTag handle) {
         this.handle = handle;
+    }
+
+    public static NbtTagCompound fromItemStack(ItemStack item) {
+        if (item.getComponentsPatch().isEmpty()) {
+            return new NbtTagCompound(new CompoundTag());
+        }
+        Tag tag = item.save(MinecraftServer.getServer().registryAccess());
+        if (tag instanceof CompoundTag compound) {
+            return new NbtTagCompound(compound.getCompound("components"));
+        }
+        return new NbtTagCompound(new CompoundTag());
     }
 
     @Override
@@ -24,25 +37,22 @@ public class NbtTagCompound implements INbtTagCompound {
 
     @Override
     public boolean hasKey(String key) {
-        if (handle == null) return false;
-        return handle.hasTag(key);
+        return handle != null && handle.contains(key);
     }
 
     @Override
     public boolean hasKeyOfType(String key, NbtDataType nbtDataType) {
-        if (handle == null) return false;
-        return handle.hasTag(key, NBTType.valueOf(nbtDataType.id));
+        return handle != null && handle.contains(key, nbtDataType.id);
     }
 
     @Override
     public Set<String> getKeys() {
-        if (handle == null) return Collections.emptySet();
-        return handle.getKeys();
+        return handle == null ? Collections.emptySet() : handle.getAllKeys();
     }
 
     @Override
     public int getInt(String key) {
-        return handle.getInteger(key);
+        return handle.getInt(key);
     }
 
     @Override
@@ -77,12 +87,12 @@ public class NbtTagCompound implements INbtTagCompound {
 
     @Override
     public INbtTagList getList(String key, NbtDataType nbtDataType) {
-        return new NbtTagList(nbtDataType == NbtDataType.STRING ? handle.getStringList(key) : handle.getCompoundList(key));
+        return new NbtTagList(handle.getList(key, nbtDataType.id));
     }
 
     @Override
     public INbtTagList getList(String key) {
-        return new NbtTagList(handle.getCompoundList(key));
+        return new NbtTagList(handle.getList(key, NbtDataType.COMPOUND.id));
     }
 
     @Override
