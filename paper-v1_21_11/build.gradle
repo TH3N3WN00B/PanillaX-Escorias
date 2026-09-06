@@ -1,6 +1,17 @@
-plugins {
-    id("io.papermc.paperweight.userdev") version "2.0.0-beta.21"
+buildscript {
+    repositories {
+        gradlePluginPortal()
+    }
+    dependencies {
+        classpath 'com.gradleup.shadow:shadow-gradle-plugin:9.3.0'
+    }
 }
+
+plugins {
+    id("io.papermc.paperweight.userdev") version "2.0.0-beta.22"
+}
+
+apply plugin: 'com.gradleup.shadow'
 
 repositories {
     mavenCentral()
@@ -10,11 +21,29 @@ repositories {
     }
 }
 
+// Ship the main PanillaX plugin code (bukkit listeners, command, config) inside
+// this Java 25 build. Together with this module's NMS implementations it forms a
+// standalone plugin jar for 1.21.11+ / 26.x servers.
+sourceSets {
+    main {
+        java {
+            srcDirs = ['src/main/java', '../paper/src/main/java']
+        }
+        resources {
+            srcDirs = ['src/main/resources', '../paper/src/main/resources']
+        }
+    }
+}
+
 dependencies {
     compileOnly project(':panillax-api')
+    // compiled against the oldest supported Paper API so the plugin bytecode
+    // loads on every supported server version
+    compileOnly 'io.papermc.paper:paper-api:1.21.1-R0.1-SNAPSHOT'
     paperweight.paperDevBundle("1.21.11-R0.1-SNAPSHOT")
     implementation 'net.kyori:adventure-text-serializer-ansi:4.17.0' //required for building .11
-    implementation 'de.tr7zw:item-nbt-api:2.15.7'
+    implementation 'de.tr7zw:item-nbt-api:2.16.0'
+    implementation 'org.bstats:bstats-bukkit:3.1.0'
 }
 
 java {
@@ -22,3 +51,22 @@ java {
         languageVersion = JavaLanguageVersion.of(25)
     }
 }
+
+processResources {
+    filesMatching('**/paper-plugin.yml') {
+        expand(
+                'version': project.parent.version
+        )
+    }
+}
+
+shadowJar {
+    // paperweight reobfs the produced jar; keep shadow output under the plugin's own name
+    archiveFileName.set("PanillaX-${project.version}-java25.jar")
+    destinationDirectory.set(new File("../target"))
+
+    relocate("de.tr7zw.changeme.nbtapi", "com.ruinscraft.panilla.lib.nbtapi")
+    relocate("org.bstats", "com.ruinscraft.panilla.lib.bstats")
+}
+
+build.dependsOn(shadowJar)

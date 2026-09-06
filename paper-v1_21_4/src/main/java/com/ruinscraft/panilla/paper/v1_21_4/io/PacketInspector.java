@@ -1,4 +1,4 @@
-package com.ruinscraft.panilla.paper.v1_21_11.io;
+package com.ruinscraft.panilla.paper.v1_21_4.io;
 
 import com.ruinscraft.panilla.api.IPanilla;
 import com.ruinscraft.panilla.api.IPanillaPlayer;
@@ -9,7 +9,7 @@ import com.ruinscraft.panilla.api.exception.NbtNotPermittedException;
 import com.ruinscraft.panilla.api.io.IPacketInspector;
 import com.ruinscraft.panilla.api.nbt.INbtTagCompound;
 import com.ruinscraft.panilla.api.nbt.checks.NbtChecks;
-import com.ruinscraft.panilla.paper.v1_21_11.nbt.NbtTagCompound;
+import com.ruinscraft.panilla.paper.v1_21_4.nbt.NbtTagCompound;
 import de.tr7zw.changeme.nbtapi.NBT;
 import net.minecraft.core.component.TypedDataComponent;
 import net.minecraft.network.protocol.game.*;
@@ -39,9 +39,20 @@ public class PacketInspector implements IPacketInspector {
 
     @Override
     public void checkPacketPlayInClickContainer(Object packetHandle) throws NbtNotPermittedException {
-        // Since 1.21.5, ServerboundContainerClickPacket doesn't handle an ItemStack but an HashedItem.
-        // The player can't inject stuff here, nor can we read it at this stage.
-        return;
+        if (!(packetHandle instanceof ServerboundContainerClickPacket)) return;
+        ServerboundContainerClickPacket packet = (ServerboundContainerClickPacket) packetHandle;
+        int windowId = packet.getContainerId();
+        if (windowId != 0 && panilla.getPConfig().ignoreNonPlayerInventories) return;
+
+        int slot = packet.getButtonNum();
+        ItemStack item = packet.getCarriedItem();
+        if (item == null || item.isEmpty() || item.getComponents().isEmpty()) return;
+
+        NbtTagCompound tag = new NbtTagCompound(NBT.itemStackToNBT(item.getBukkitStack()).getCompound("components"));
+        String itemClass = item.getItem().getDescriptionId();
+        String packetClass = "PacketPlayInWindowClick";
+
+        NbtChecks.checkPacketPlayIn(slot, tag, itemClass, packetClass, panilla);
     }
 
     @Override
@@ -92,14 +103,14 @@ public class PacketInspector implements IPacketInspector {
         if (!(packetHandle instanceof ClientboundContainerSetContentPacket)) return;
         ClientboundContainerSetContentPacket packet = (ClientboundContainerSetContentPacket) packetHandle;
 
-        int windowId = packet.containerId();
+        int windowId = packet.getContainerId();
 
         // check if window is not player inventory
         if (windowId != 0) {
             return;
         }
 
-        List<ItemStack> itemStacks = packet.items();
+        List<ItemStack> itemStacks = packet.getItems();
 
         for (ItemStack itemStack : itemStacks) {
             // Skip empty items (nothing to check); non-empty items MUST be checked.

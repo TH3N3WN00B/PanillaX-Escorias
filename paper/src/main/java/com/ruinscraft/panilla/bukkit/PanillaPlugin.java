@@ -16,6 +16,7 @@ import org.bukkit.plugin.java.JavaPlugin;
 import org.jetbrains.annotations.NotNull;
 
 import java.io.IOException;
+import java.lang.reflect.Constructor;
 import java.lang.reflect.InvocationTargetException;
 import java.util.HashMap;
 import java.util.Map;
@@ -23,7 +24,7 @@ import java.util.Map;
 public class PanillaPlugin extends JavaPlugin implements IPanilla {
 
     private static final String SERVER_IMP = Bukkit.getServer().getClass().getSimpleName();
-    private static Class<? extends IPacketSerializer> packetSerializerClass;
+    private Class<? extends IPacketSerializer> packetSerializerClass;
 
     private PConfig pConfig;
     private PTranslations pTranslations;
@@ -111,9 +112,11 @@ public class PanillaPlugin extends JavaPlugin implements IPanilla {
 
         Map<String, Integer> enchantmentOverrides = new HashMap<>();
 
-        for (String enchantmentOverride : getConfig().getConfigurationSection("max-enchantment-levels.overrides").getKeys(false)) {
-            int level = getConfig().getInt("max-enchantment-levels.overrides." + enchantmentOverride);
-            enchantmentOverrides.put(enchantmentOverride, level);
+        if (getConfig().getConfigurationSection("max-enchantment-levels.overrides") != null) {
+            for (String enchantmentOverride : getConfig().getConfigurationSection("max-enchantment-levels.overrides").getKeys(false)) {
+                int level = getConfig().getInt("max-enchantment-levels.overrides." + enchantmentOverride);
+                enchantmentOverrides.put(enchantmentOverride, level);
+            }
         }
 
         pConfig.minecraftMaxEnchantmentLevelOverrides = enchantmentOverrides;
@@ -163,38 +166,6 @@ public class PanillaPlugin extends JavaPlugin implements IPanilla {
         metrics = new Metrics(this, 26380);
     }
 
-    @SuppressWarnings("deprecation")
-    private void initVersion() {
-        //check Java
-        if(Runtime.version().feature() < 25) {
-            getLogger().severe("PanillaX only supports Java 25. Please update to Java 25 if your server software supports it, upgrade your server version or simply use an older Panilla version.");
-            Bukkit.shutdown();
-        }
-        //init data-specific classes
-        switch (Bukkit.getUnsafe().getDataVersion()) {
-            case 4671: //1.21.11
-            case 4790: //  26.1.2
-                initLatest();
-                break;
-            default:
-                getLogger().warning("Unknown server implementation: " + Bukkit.getVersion() + " (data version "+Bukkit.getUnsafe().getDataVersion()+") is not supported by PanillaX. Using latest implementation; may not work.");
-                initLatest();
-        }
-    }
-
-    private void initLatest(){
-        packetSerializerClass = com.ruinscraft.panilla.paper.v1_21_11.io.dplx.PacketSerializer.class;
-        protocolConstants = new IProtocolConstants() {
-            @Override
-            public int maxBookPages() {
-                return 100;
-            }
-        };
-        playerInjector = new com.ruinscraft.panilla.paper.v1_21_11.io.PlayerInjector();
-        packetInspector = new com.ruinscraft.panilla.paper.v1_21_11.io.PacketInspector(this);
-        containerCleaner = new com.ruinscraft.panilla.paper.v1_21_11.InventoryCleaner(this);
-    }
-
     @Override
     public void onDisable() {
         /* Uninject any online players */
@@ -205,7 +176,132 @@ public class PanillaPlugin extends JavaPlugin implements IPanilla {
                 // Ignore
             }
         }
-        metrics.shutdown();
+        if (metrics != null) {
+            metrics.shutdown();
+        }
+    }
+
+    // Version-group suffix used to load the matching NMS implementation bundle.
+    // Each bundle ships its own package: v1_21_4, v1_21_5, v1_21_11.
+    private enum VersionGroup {
+        V1_21_4("v1_21_4"),
+        V1_21_5("v1_21_5"),
+        V1_21_11("v1_21_11");
+
+        final String pkg;
+
+        VersionGroup(String pkg) {
+            this.pkg = pkg;
+        }
+    }
+
+    @SuppressWarnings("deprecation")
+    private VersionGroup resolveVersionGroup(int dataVersion) {
+        // 1.21 / 1.21.1 / 1.21.2 / 1.21.3 / 1.21.4
+        if (dataVersion <= 4189) {
+            return VersionGroup.V1_21_4;
+        }
+        // 1.21.5 / 1.21.6 / 1.21.7 / 1.21.8 / 1.21.9 / 1.21.10
+        if (dataVersion <= 4556) {
+            return VersionGroup.V1_21_5;
+        }
+        // 1.21.11 / 26.x
+        return VersionGroup.V1_21_11;
+    }
+
+    @SuppressWarnings("deprecation")
+    private int currentDataVersion() {
+        try {
+            return Bukkit.getUnsafe().getDataVersion();
+        } catch (Throwable t) {
+            return Integer.MAX_VALUE;
+        }
+    }
+
+    @SuppressWarnings({"unchecked", "deprecation"})
+    private void initVersion() {
+        int dataVersion = currentDataVersion();
+        VersionGroup requested = resolveVersionGroup(dataVersion);
+
+        // 1.21.x servers run Java 21 and ship the v1_21_4/v1_21_5 bundles;
+        // 26.x servers run Java 25 and ship the v1_21_11 bundle.
+        if (requested == VersionGroup.V1_21_11 && Runtime.version().feature() < 25) {
+            getLogger().warning("Server data version " + dataVersion + " needs a Java 25 server and the PanillaX Java 25 build.");
+        }
+
+        // Try the requested bundle first, then degrade to the newest available one.
+        VersionGroup[] order = VersionGroup.values();
+        for (int i = order.length - 1; i >= 0; i--) {
+            VersionGroup group = order[i];
+            // Never try a bundle newer than the requested one.
+            if (group.ordinal() > requested.ordinal()) {
+                continue;
+            }
+            if (loadVersionGroup(group, dataVersion)) {
+                if (group != requested) {
+                    getLogger().warning("PanillaX bundle '" + group.pkg + "' is not present in this build, tried newest available. "
+                            + "Download the correct PanillaX build for server data version " + dataVersion + ".");
+                }
+                return;
+            }
+        }
+
+        getLogger().severe("Fatal: could not load any PanillaX implementation bundle for server data version " + dataVersion + ".");
+        initLatestFallback();
+    }
+
+    @SuppressWarnings("unchecked")
+    private boolean loadVersionGroup(VersionGroup group, int dataVersion) {
+        String base = "com.ruinscraft.panilla.paper." + group.pkg;
+
+        try {
+            packetSerializerClass = (Class<? extends IPacketSerializer>) Class.forName(base + ".io.dplx.PacketSerializer");
+
+            Class<?> playerInjectorClass = Class.forName(base + ".io.PlayerInjector");
+            playerInjector = (IPlayerInjector) playerInjectorClass.getDeclaredConstructor().newInstance();
+
+            Class<?> packetInspectorClass = Class.forName(base + ".io.PacketInspector");
+            Constructor<?> packetInspectorCtor = packetInspectorClass.getDeclaredConstructor(IPanilla.class);
+            packetInspector = (IPacketInspector) packetInspectorCtor.newInstance(this);
+
+            Class<?> containerCleanerClass = Class.forName(base + ".InventoryCleaner");
+            Constructor<?> containerCleanerCtor = containerCleanerClass.getDeclaredConstructor(IPanilla.class);
+            containerCleaner = (IInventoryCleaner) containerCleanerCtor.newInstance(this);
+        } catch (ClassNotFoundException | NoSuchMethodException | InstantiationException | IllegalAccessException | InvocationTargetException e) {
+            return false;
+        }
+
+        final int maxBookPages = resolveVersionGroup(dataVersion) == VersionGroup.V1_21_11 ? 100 : 50;
+        protocolConstants = new IProtocolConstants() {
+            @Override
+            public int maxBookPages() {
+                return maxBookPages;
+            }
+        };
+
+        getLogger().info("Detected server data version " + dataVersion + " -> using PanillaX implementation bundle '" + group.pkg + "'");
+        return true;
+    }
+
+    // Handles the unlikely case the reflective bundle load fails. Logs and continues with a best-effort instance.
+    @SuppressWarnings("unchecked")
+    private void initLatestFallback() {
+        try {
+            String base = "com.ruinscraft.panilla.paper.v1_21_11";
+            packetSerializerClass = (Class<? extends IPacketSerializer>) Class.forName(base + ".io.dplx.PacketSerializer");
+            playerInjector = (IPlayerInjector) Class.forName(base + ".io.PlayerInjector").getDeclaredConstructor().newInstance();
+            packetInspector = (IPacketInspector) Class.forName(base + ".io.PacketInspector").getDeclaredConstructor(IPanilla.class).newInstance(this);
+            containerCleaner = (IInventoryCleaner) Class.forName(base + ".InventoryCleaner").getDeclaredConstructor(IPanilla.class).newInstance(this);
+            protocolConstants = new IProtocolConstants() {
+                @Override
+                public int maxBookPages() {
+                    return 100;
+                }
+            };
+        } catch (Throwable t) {
+            getLogger().severe("Fatal: could not load any PanillaX implementation.");
+            t.printStackTrace();
+        }
     }
 
 }

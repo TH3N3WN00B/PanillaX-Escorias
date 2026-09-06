@@ -1,6 +1,12 @@
+plugins {
+    // Resolve the paperweight plugin once at the root level so multiple NMS
+    // submodules can share its build services without classloader conflicts.
+    id 'io.papermc.paperweight.userdev' version '2.0.0-beta.22' apply false
+}
+
 allprojects {
     group = 'com.ruinscraft'
-    version = '1.1.0'
+    version = '1.2.0'
 }
 
 subprojects {
@@ -19,6 +25,12 @@ subprojects {
         }
         maven {
             url = "https://sonatype.org"
+        }
+    }
+
+    java {
+        toolchain {
+            // Overridden per-module for version groups where needed (Java 21 vs Java 25)
         }
     }
 }

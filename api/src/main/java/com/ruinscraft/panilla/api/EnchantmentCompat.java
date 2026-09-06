@@ -53,6 +53,9 @@ public enum EnchantmentCompat {
     BREACH("minecraft:breach", "", -1),
     WIND_BURST("minecraft:wind_burst", "", -1),
 
+    // 1.21.9
+    COMPANION("minecraft:companion", "", -1),
+
     ;
 
     public final String namedKey;

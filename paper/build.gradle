@@ -1,6 +1,6 @@
 java {
     toolchain {
-        languageVersion = JavaLanguageVersion.of(25)
+        languageVersion = JavaLanguageVersion.of(21)
     }
 }
 
@@ -13,8 +13,11 @@ repositories {
 
 dependencies {
     implementation project(':panillax-api')
-    implementation project(':panillax-paper-v1_21_11')
-    compileOnly 'io.papermc.paper:paper-api:1.21.11-R0.1-SNAPSHOT' //use 1.21.11 Paper API
+    implementation project(':panillax-paper-v1_21_4')
+    implementation project(':panillax-paper-v1_21_5')
+    // compiled against the oldest supported Paper API so the plugin bytecode
+    // loads on every server version from 1.21.x up to 1.21.10
+    compileOnly 'io.papermc.paper:paper-api:1.21.1-R0.1-SNAPSHOT'
     implementation 'org.bstats:bstats-bukkit:3.1.0'
 }
 
@@ -28,7 +31,7 @@ buildscript {
 }
 
 processResources {
-    filesMatching('**plugin.yml') {
+    filesMatching('**/paper-plugin.yml') {
         expand(
                 'version': project.parent.version
         )
